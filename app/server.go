@@ -8,7 +8,19 @@ import (
 	"os"
 	"strconv"
 	"strings"
+	"sync"
 )
+
+type db struct {
+	data  map[string]string
+	mutex sync.Mutex
+}
+
+var database db
+
+func init() {
+	database.data = make(map[string]string)
+}
 
 func main() {
 	l, err := net.Listen("tcp", "0.0.0.0:6379")
@@ -96,6 +108,78 @@ func handleConnection(conn net.Conn) {
 					log.Printf("ECHO %s\n", value)
 
 					_, err := writer.WriteString("+" + value + "\r\n")
+					if err != nil {
+						log.Println("Error writing to connection: ", err.Error())
+						return
+					}
+					writer.Flush()
+				} else if command == "GET" {
+					if !scanner.Scan() {
+						log.Println("Error reading key length")
+						return
+					}
+
+					if !scanner.Scan() {
+						log.Println("Error reading key")
+						return
+					}
+
+					key := strings.Trim(scanner.Text(), "\r\n")
+
+					value := database.data[key]
+					log.Printf("GET %s\n", key)
+
+					_, err := writer.WriteString("$" + strconv.Itoa(len(value)) + "\r\n" + value + "\r\n")
+					if err != nil {
+						log.Println("Error writing to connection: ", err.Error())
+						return
+					}
+					writer.Flush()
+				}
+			} else if commandCount == 3 {
+				if !scanner.Scan() {
+					log.Println("Error reading command length")
+					return
+				}
+
+				if !scanner.Scan() {
+					log.Println("Error reading command")
+					return
+				}
+
+				command := strings.ToUpper(strings.Trim(scanner.Text(), "\r\n"))
+				if command == "SET" {
+					if !scanner.Scan() {
+						log.Println("Error reading key length")
+						return
+					}
+
+					if !scanner.Scan() {
+						log.Println("Error reading key")
+						return
+					}
+
+					key := strings.Trim(scanner.Text(), "\r\n")
+
+					if !scanner.Scan() {
+						log.Println("Error reading value length")
+						return
+					}
+
+					if !scanner.Scan() {
+						log.Println("Error reading value")
+						return
+					}
+
+					value := strings.Trim(scanner.Text(), "\r\n")
+
+					database.mutex.Lock()
+					defer database.mutex.Unlock()
+					database.data[key] = value
+
+					log.Printf("SET %s %s\n", key, value)
+
+					_, err := writer.WriteString("+OK\r\n")
 					if err != nil {
 						log.Println("Error writing to connection: ", err.Error())
 						return
