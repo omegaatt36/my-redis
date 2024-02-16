@@ -1,10 +1,12 @@
 package main
 
 import (
+	"bufio"
 	"fmt"
 	"log"
 	"net"
 	"os"
+	"time"
 )
 
 func main() {
@@ -28,15 +30,21 @@ func main() {
 
 func handleConnection(conn net.Conn) {
 	defer conn.Close()
-	buf := make([]byte, 1024)
-	_, err := conn.Read(buf)
-	if err != nil {
-		fmt.Println("Error reading from connection: ", err.Error())
-		return
-	}
+	defer fmt.Println("Connection closed")
 
-	_, err = conn.Write([]byte("+PONG\r\n"))
-	if err != nil {
-		log.Println("Error writing to connection: ", err.Error())
+	conn.SetReadDeadline(time.Now().Add(1 * time.Second))
+
+	scanner := bufio.NewScanner(conn)
+
+	for scanner.Scan() {
+		text := scanner.Text()
+		fmt.Println("Text:", text)
+		if scanner.Text() == "ping" {
+			_, err := conn.Write([]byte("+PONG\r\n"))
+			if err != nil {
+				fmt.Println("Error while writing data:", err.Error())
+				return
+			}
+		}
 	}
 }
