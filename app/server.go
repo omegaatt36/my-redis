@@ -6,7 +6,8 @@ import (
 	"log"
 	"net"
 	"os"
-	"time"
+	"strconv"
+	"strings"
 )
 
 func main() {
@@ -30,21 +31,82 @@ func main() {
 
 func handleConnection(conn net.Conn) {
 	defer conn.Close()
-	defer fmt.Println("Connection closed")
-
-	conn.SetReadDeadline(time.Now().Add(1 * time.Second))
 
 	scanner := bufio.NewScanner(conn)
+	writer := bufio.NewWriter(conn)
 
 	for scanner.Scan() {
-		text := scanner.Text()
-		fmt.Println("Text:", text)
-		if scanner.Text() == "ping" {
-			_, err := conn.Write([]byte("+PONG\r\n"))
+		line := scanner.Text()
+
+		if strings.HasPrefix(line, "*") {
+			commandCount, err := strconv.Atoi(strings.Trim(line, "*\r\n"))
 			if err != nil {
-				fmt.Println("Error while writing data:", err.Error())
+				log.Printf("Invalid command count: %s", line)
 				return
 			}
+
+			if commandCount == 1 {
+				if !scanner.Scan() {
+					log.Println("Error reading command length")
+					return
+				}
+
+				if !scanner.Scan() {
+					log.Println("Error reading command")
+					return
+				}
+
+				command := strings.ToUpper(strings.Trim(scanner.Text(), "\r\n"))
+				if command == "PING" {
+
+					log.Printf("PING\n")
+
+					_, err := writer.WriteString("+PONG\r\n")
+					if err != nil {
+						log.Println("Error writing to connection: ", err.Error())
+						return
+					}
+					writer.Flush()
+				}
+			} else if commandCount == 2 {
+				if !scanner.Scan() {
+					log.Println("Error reading command length")
+					return
+				}
+
+				if !scanner.Scan() {
+					log.Println("Error reading command")
+					return
+				}
+
+				command := strings.ToUpper(strings.Trim(scanner.Text(), "\r\n"))
+				if command == "ECHO" {
+					if !scanner.Scan() {
+						log.Println("Error reading value length")
+						return
+					}
+
+					if !scanner.Scan() {
+						log.Println("Error reading value")
+						return
+					}
+
+					value := strings.Trim(scanner.Text(), "\r\n")
+
+					log.Printf("ECHO %s\n", value)
+
+					_, err := writer.WriteString("+" + value + "\r\n")
+					if err != nil {
+						log.Println("Error writing to connection: ", err.Error())
+						return
+					}
+					writer.Flush()
+				}
+			}
 		}
+	}
+
+	if err := scanner.Err(); err != nil {
+		log.Println("Error reading from connection: ", err.Error())
 	}
 }
