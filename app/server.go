@@ -3,6 +3,7 @@ package main
 import (
 	"bufio"
 	"errors"
+	"flag"
 	"fmt"
 	"log"
 	"net"
@@ -15,6 +16,7 @@ import (
 )
 
 type server struct {
+	port    int
 	storage storage.Store
 }
 
@@ -23,11 +25,17 @@ func main() {
 		storage: storage.NewDatabase(),
 	}
 
-	l, err := net.Listen("tcp", "0.0.0.0:6379")
+	flag.IntVar(&srv.port, "port", 6379, "server port")
+	flag.Parse()
+
+	l, err := net.Listen("tcp", srv.portString())
 	if err != nil {
 		fmt.Println("Failed to bind to port 6379")
 		os.Exit(1)
 	}
+
+	fmt.Println("Listening on port: ", srv.port)
+
 	for {
 		conn, err := l.Accept()
 		if err != nil {
@@ -39,6 +47,10 @@ func main() {
 
 		go srv.handleConnection(conn)
 	}
+}
+
+func (s *server) portString() string {
+	return "0.0.0.0:" + strconv.Itoa(s.port)
 }
 
 func (s *server) handleConnection(conn net.Conn) {
